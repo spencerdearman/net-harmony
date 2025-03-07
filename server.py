@@ -46,3 +46,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+    # make a second instrument in a lower octave with longer notes,
+    # potentially only picks from a first and fifth, first third and fifth, holding the tone for logner

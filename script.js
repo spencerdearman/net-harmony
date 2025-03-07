@@ -3,7 +3,7 @@ const reverb = new Tone.Reverb({ wet: 0.7, decay: 6 }).toDestination();
 
 const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: "sine" },
-    envelope: { attack: 0.3, decay: 0.6, sustain: 0.4, release: 1.2 }
+    envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
 }).connect(reverb);
 
 const piano = new Tone.Sampler({
@@ -16,21 +16,30 @@ const piano = new Tone.Sampler({
     release: 2
 }).connect(reverb);
 
-const lowPass = new Tone.Filter(800, "lowpass").toDestination();
+const lowPass = new Tone.Filter(1200, "lowpass").toDestination();
 synth.connect(lowPass);
 
-// **New IGMP Synth (Smooth, Evolving Pad)**
+// IGMP Synth
 const igmpSynth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: "triangle" },
-    envelope: { attack: 0.5, decay: 1, sustain: 0.7, release: 2 }
-}).connect(new Tone.Reverb({ wet: 0.8, decay: 4 }).toDestination());
+    envelope: { attack: 0.5, decay: 1, sustain: 0.8, release: 2 }
+}).connect(new Tone.Reverb({ wet: 0.9, decay: 5 }).toDestination());
 
-// **Scales**
-const minor = [2, 1, 2, 2, 1, 2, 2];
+// Chords for Harmony
+const chordProgression = [
+    ["C4", "E4", "G4", "B4"],   // Cmaj7
+    ["A3", "C4", "E4", "G4"],   // Am7
+    ["D4", "F4", "A4", "C5"],   // Dm7
+    ["G3", "B3", "D4", "F4"]    // G7
+];
+let chordIndex = 0;
+
+// Scales
+const minorScale = [2, 1, 2, 2, 1, 2, 2];
 const keys = ['F', 'D', 'G', 'C', 'D#', 'A#'];
 const key = keys[Math.floor(Math.random() * keys.length)];
-const rightHandScale = createScale(`${key}4`, minor);
-const leftHandScale = createScale(`${key}3`, minor);
+const rightHandScale = createScale(`${key}4`, minorScale);
+const leftHandScale = createScale(`${key}3`, minorScale);
 
 function createScale(root, mode) {
     const scale = [root];
@@ -48,16 +57,17 @@ function createScale(root, mode) {
     return scale;
 }
 
-// **Packet Queue**
+// Packet Queue
 let packetQueue = [];
-const playbackInterval = 0.4; // Regular timing in seconds
+const playbackInterval = 0.5; // More controlled timing
 let activeSynthNote = null;
 let activePianoNote = null;
 let activeIgmpNote = null;
+let lastPlayedNote = null;
 
 let hasStarted = false;
 
-// **Start Tone.js on User Interaction**
+// Start Tone.js on User Interaction
 async function startMusic() {
     await Tone.start();
     console.log("🎵 Tone.js Ready");
@@ -66,10 +76,11 @@ async function startMusic() {
         hasStarted = true;
         connectWebSocket();
         startPacketPlayback(); // Start processing the queue
+        // playChords(); // Start harmonic progression
     }
 }
 
-// **WebSocket Connection**
+// WebSocket Connection
 function connectWebSocket() {
     const ws = new WebSocket("ws://localhost:8765");
 
@@ -93,7 +104,7 @@ function connectWebSocket() {
     };
 }
 
-// **Regularly Process the Packet Queue**
+// Regularly Process the Packet Queue
 function startPacketPlayback() {
     setInterval(() => {
         if (packetQueue.length > 0) {
@@ -103,7 +114,16 @@ function startPacketPlayback() {
     }, playbackInterval * 1000);
 }
 
-// **Play Music from Queued Packets**
+// Background Chord Progression
+function playChords() {
+    setInterval(() => {
+        let chord = chordProgression[chordIndex];
+        synth.triggerAttackRelease(chord, "2n", Tone.now(), 0.4);
+        chordIndex = (chordIndex + 1) % chordProgression.length;
+    }, 4000); // Change chords every 4 seconds
+}
+
+// Play Music from Queued Packets
 function playPacketMusic(packet) {
     let startTime = Tone.now();
     let pitch = rightHandScale[(packet.size % rightHandScale.length)];
@@ -116,22 +136,30 @@ function playPacketMusic(packet) {
 
     console.log(`🎶 Playing: ${pitch}, Protocol: ${packet.protocol}`);
 
-    // **Stop previous notes before playing a new one**
+    // Portamento Effect (Gliding between notes)
+    if (lastPlayedNote) {
+        synth.set({
+            portamento: 0.1 // Adds a smooth glide between notes
+        });
+    }
+    lastPlayedNote = pitch;
+
+    // Stop previous notes before playing a new one
     if (activeSynthNote) synth.triggerRelease(activeSynthNote);
     if (activePianoNote) piano.triggerRelease(activePianoNote);
     if (activeIgmpNote) igmpSynth.triggerRelease(activeIgmpNote);
 
-    // **Protocol Mappings**
-    if (packet.protocol === 17) { // UDP
-        synth.triggerAttack(pitch, startTime, velocity * 0.6);
+    // Protocol Mappings
+    if (packet.protocol === 17) { // UDP -- potentially melodic
+        synth.triggerAttackRelease(pitch, 0.5, startTime, velocity * 0.6);
         activeSynthNote = pitch;
     }
-    else if (packet.protocol === 6) { // TCP
-        piano.triggerAttack(pitch, startTime, velocity * 0.8);
+    else if (packet.protocol === 6) { // TCP -- potentially base notes
+        piano.triggerAttacRelease(pitch, 0.5, startTime, velocity * 0.8);
         activePianoNote = pitch;
     }
     else if (packet.protocol === 2) { // IGMP (New Pad Synth)
-        igmpSynth.triggerAttack(pitch, startTime, velocity * 0.7);
+        igmpSynth.triggerAttackRelease(pitch, 0.5, startTime, velocity * 0.7);
         activeIgmpNote = pitch;
     }
     else if (packet.protocol === 1) { // ICMP (Percussion hit)
