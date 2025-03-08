@@ -6,32 +6,22 @@ const synth = new Tone.PolySynth(Tone.Synth, {
     envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
 }).connect(reverb);
 
-// Darker Synth (Now Smoother & More Musical)
+// Darker Synth (Smoother & More Musical)
 const darkSynth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: "sine" }, // Softer sawtooth for a richer, warm tone
     envelope: { attack: 0.15, decay: 0.6, sustain: 0.7, release: 1.8 }, // Balanced decay and sustain
     polyphony: 8 // Allows smoother overlapping notes
 }).connect(new Tone.Filter(1000, "lowpass").toDestination()); // Slightly darkened tone
 
-const piano = new Tone.Sampler({
-    baseUrl: "https://tonejs.github.io/audio/salamander/",
-    urls: {
-        'C3': 'C3.mp3', 'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3', 'A3': 'A3.mp3',
-        'C4': 'C4.mp3', 'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3', 'A4': 'A4.mp3',
-        'C5': 'C5.mp3', 'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3', 'A5': 'A5.mp3'
-    },
-    release: 2
-}).connect(reverb);
-
 const lowPass = new Tone.Filter(1200, "lowpass").toDestination();
 synth.connect(lowPass);
 
 // Chord Progression (for harmony)
 const chordProgression = [
-    ["C3", "E3", "G3"],   // C Major
+    ["C3", "D#3", "G3"],  // C Minor
     ["A2", "C3", "E3"],   // A Minor
     ["D3", "F3", "A3"],   // D Minor
-    ["G2", "B2", "D3"]    // G Major
+    ["G2", "A#2", "D3"]   // G Minor
 ];
 let chordIndex = 0;
 
@@ -113,7 +103,7 @@ function playPacketMusic(packet) {
     let melodyNote = melodyScale[(packet.size % melodyScale.length)];
     let bassNoteSet = getBassNotes(packet.size);
 
-    console.log(`🎶 Playing: ${melodyNote} (UDP) | ${bassNoteSet} (Other packets), Protocol: ${packet.protocol}`);
+    console.log(`🎶 Playing: ${melodyNote} (UDP) | ${bassNoteSet} (Other packets) |, Protocol: ${packet.protocol}`);
 
     // Smooth glide between notes
     if (lastPlayedNote) {
