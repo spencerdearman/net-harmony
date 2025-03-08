@@ -1,6 +1,6 @@
 # Network Harmony
 
-https://github.com/user-attachments/assets/09d4e192-2ad4-4f09-a864-6351dcd351b2
+https://github.com/user-attachments/assets/2266032f-c814-4942-9679-2b3cde384042
 
 This project turns **live network packets** into **musical notes** and visualizes them in real time. As packets arrive, they trigger **Tone.js** polySynth's and update a force-directed graph based on network relationships (IP addresses). The notes being loaded into the playing queue are shown on the left hand side of the screen as they arrive.
 
