@@ -132,18 +132,33 @@ function playPacketMusic(packet) {
     lastPlayedNote = melodyNote;
 
     // Play melody (UDP Packets)
+    let protocolClass = "unknown";
     if (packet.protocol === 17) {
         synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
+        protocolClass = "udp";
     }
     // Play darker synth for harmony (Non-UDP Packets)
     else {
         darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
+        protocolClass = "tcp";
     }
 
     // Subtle Sub Bass (Every few packets)
     if (playSubBass) {
         subSynth.triggerAttackRelease(bassNoteSet[0], "4n", startTime, 0.5);
+        protocolClass = "icmp";
     }
+
+    updateVisualizer(melodyNote, protocolClass);
+}
+
+// UI Update
+function updateVisualizer(noteText, protocolClass) {
+    const noteElement = document.createElement("div");
+    noteElement.classList.add("note", protocolClass);
+    noteElement.textContent = `🎶 ${noteText}`;
+    document.getElementById("notes-display").prepend(noteElement);
+    setTimeout(() => noteElement.remove(), 4000);
 }
 
 // Function to pick bass notes (Root + Fifth or Root + Third + Fifth)

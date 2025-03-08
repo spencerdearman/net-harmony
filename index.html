@@ -3,12 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Music Generator</title>
+    <title>Live Packet Music</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.35/Tone.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Live Packet Capture Music</h1>
-    <button onclick="startMusic()">Start</button>
+    <div class="container">
+        <h1>Live Packet Music</h1>
+        <button onclick="startMusic()" class="start-btn">Start</button>
+        <div class="visualizer">
+            <div id="notes-display"></div>
+        </div>
+    </div>
     <script src="script.js"></script>
 </body>
 </html>
