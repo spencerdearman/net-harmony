@@ -1,4 +1,4 @@
-# Live Packet Music
+# Network Harmony
 
 This project turns **live network packets** into **musical notes** and visualizes them in real time. As packets arrive, they trigger **Tone.js** instruments (producing sound) and update a **D3** force-directed graph (showing network relationships). A vertical list of recent **notes** appears on the left side of the screen.
 
