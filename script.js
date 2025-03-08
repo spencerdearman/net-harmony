@@ -1,14 +1,17 @@
 // ---------------------------------------------
-// 1) Tone.js Instruments & Setup
+//  Tone.js Instruments & Setup
 // ---------------------------------------------
+
 const reverb = new Tone.Reverb({ wet: 0.7, decay: 6 }).toDestination();
 const chorus = new Tone.Chorus(1.5, 2.5, 0.3).toDestination();
 
+// The main synth used for UDP packets and melody
 const synth = new Tone.PolySynth(Tone.Synth, {
   oscillator: { type: "sine" },
   envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
 }).connect(reverb);
 
+// The synth used for TCP packets and bass
 const darkSynth = new Tone.PolySynth(Tone.Synth, {
   volume: -10,
   oscillator: { type: "sine" },
@@ -16,12 +19,14 @@ const darkSynth = new Tone.PolySynth(Tone.Synth, {
   polyphony: 8
 }).connect(new Tone.Filter(1000, "lowpass").connect(chorus).connect(reverb));
 
+// The synth used for background noise
 const padSynth = new Tone.NoiseSynth({
   volume: -20,
   noise: { type: "pink" },
   envelope: { attack: 2, decay: 5, sustain: 0.7, release: 3 }
 }).connect(new Tone.AutoFilter("0.2n").toDestination());
 
+// The synth used for every 7th packet
 const subSynth = new Tone.MonoSynth({
   oscillator: { type: "sine" },
   envelope: { attack: 0.3, decay: 0.8, sustain: 0.6, release: 2 }
@@ -30,7 +35,7 @@ const subSynth = new Tone.MonoSynth({
 const lowPass = new Tone.Filter(1200, "lowpass").toDestination();
 synth.connect(lowPass);
 
-// Some chord progression (for harmony)
+// Chord progression for bass notes
 const chordProgression = [
   ["C3", "D#3", "G3"],  // C Minor
   ["A2", "C3", "E3"],   // A Minor
@@ -39,7 +44,7 @@ const chordProgression = [
 ];
 let chordIndex = 0;
 
-// Scale logic
+// Scale Logic -- Based on In-Class Demo
 const minorScale = [2, 1, 2, 2, 1, 2, 2];
 const keys = ['F', 'D', 'G', 'C', 'D#', 'A#'];
 const key = keys[Math.floor(Math.random() * keys.length)];
@@ -63,12 +68,106 @@ function createScale(root, mode) {
 
 // Packet Queue
 let packetQueue = [];
-const playbackInterval = 0.5; // seconds
+const playbackInterval = 0.5;
 let lastPlayedNote = null;
 
 // ---------------------------------------------
-// 2) D3 Force-Directed Graph Setup
+// Play Music + Integrate Visuals
 // ---------------------------------------------
+
+// Play a packet as music
+function playPacketMusic(packet) {
+    let startTime = Tone.now();
+    let velocity = Math.min(0.6, packet.size / 2500);
+    let melodyNote = melodyScale[(packet.size % melodyScale.length)];
+    let bassNoteSet = getBassNotes(packet.size);
+    let playSubBass = packet.size % 7 === 0;
+  
+    if (lastPlayedNote) {
+      synth.set({ portamento: 0.1 });
+    }
+    lastPlayedNote = melodyNote;
+  
+    let protocolClass = "unknown";
+    if (packet.protocol === 17) {
+      synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
+      protocolClass = "udp";
+    } else {
+      darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
+      protocolClass = "tcp";
+    }
+    if (playSubBass) {
+      subSynth.triggerAttackRelease(bassNoteSet[0], "4n", startTime, 0.5);
+    }
+  
+    updateNoteVisualizer(melodyNote, protocolClass);
+    addPacketToGraph(packet);
+  }
+  
+  // Update the note visualizer with the current note
+  function updateNoteVisualizer(noteText, protocolClass) {
+    const noteElement = document.createElement("div");
+    noteElement.classList.add("note", protocolClass);
+    noteElement.textContent = `🎶 ${noteText}`;
+    document.getElementById("notes-display").prepend(noteElement);
+    setTimeout(() => noteElement.remove(), 4000);
+  }
+  
+  // Get the bass notes for a given seed
+  function getBassNotes(seed) {
+    let chord = chordProgression[chordIndex % chordProgression.length];
+    let useThreeNotes = seed % 3 === 0;
+    return useThreeNotes ? chord : [chord[0], chord[2]];
+  }
+  
+  // ---------------------------------------------
+  // WebSocket + Playback
+  // ---------------------------------------------
+  
+  // Start the music and WebSocket connection
+  async function startMusic() {
+    await Tone.start();
+    console.log("🎵 Tone.js Ready");
+    connectWebSocket();
+    startPacketPlayback();
+    padSynth.triggerAttack();
+  }
+  
+  // Connect to the WebSocket server
+  function connectWebSocket() {
+    const ws = new WebSocket("ws://localhost:8765");
+    ws.onopen = () => {
+      console.log("WebSocket Connected");
+    };
+    ws.onmessage = function(event) {
+      let packet = JSON.parse(event.data);
+      console.log("📩 Queued Packet:", packet);
+      packetQueue.push(packet);
+    };
+    ws.onclose = () => {
+      console.warn("WebSocket Disconnected! Reconnecting...");
+      setTimeout(connectWebSocket, 2000);
+    };
+    ws.onerror = (error) => {
+      console.error("WebSocket Error:", error);
+    };
+  }
+  
+  // Start the packet playback interval
+  function startPacketPlayback() {
+    setInterval(() => {
+      if (packetQueue.length > 0) {
+        let packet = packetQueue.shift();
+        playPacketMusic(packet);
+      }
+    }, playbackInterval * 1000);
+  }
+
+// ---------------------------------------------
+// D3 Force-Directed Graph Setup
+// https://d3js.org/d3-force/simulation
+// ---------------------------------------------
+
 const svg = d3.select("#network-graph");
 
 // The width/height of the entire window (for bounding)
@@ -91,18 +190,17 @@ const simulation = d3.forceSimulation(nodes)
 let linkSelection = svg.selectAll(".link");
 let nodeSelection = svg.selectAll(".node");
 
-// Margin for clamping so nodes don’t sit on the very edge
+// Margin for bounding nodes
 const margin = 30;
 
 function ticked() {
-  // Position the links
   linkSelection
     .attr("x1", d => d.source.x)
     .attr("y1", d => d.source.y)
     .attr("x2", d => d.target.x)
     .attr("y2", d => d.target.y);
 
-  // Clamp each node’s x & y to keep it in the viewport
+  // Keep the nodes within the bounds
   nodeSelection
     .attr("cx", d => {
       d.x = Math.max(margin, Math.min(width - margin, d.x));
@@ -117,19 +215,16 @@ function ticked() {
 // Map protocol to color
 function getColorForProtocol(protocol) {
   if (protocol === 17) {
-    return "#1DB954"; // UDP - Green
+    return "#1DB954"; // UDP -> Green
   } else if (protocol === 6) {
-    return "#F39C12"; // TCP - Orange
-  } else if (protocol === "ICMP") {
-    return "#E74C3C"; // ICMP - Red
+    return "#F39C12"; // TCP -> Orange
   } else {
-    return "#7D3C98"; // Unknown - Purple
+    return "#7D3C98"; // Purple
   }
 }
 
 // Update graph with current nodes and links
 function updateGraph() {
-  // Update links
   linkSelection = linkSelection.data(links);
   linkSelection.exit().remove();
   linkSelection = linkSelection.enter()
@@ -139,7 +234,6 @@ function updateGraph() {
     .attr("stroke-width", 1)
     .merge(linkSelection);
 
-  // Update nodes; color based on protocol
   nodeSelection = nodeSelection.data(nodes);
   nodeSelection.exit().remove();
   nodeSelection = nodeSelection.enter()
@@ -154,8 +248,8 @@ function updateGraph() {
   simulation.alpha(0.9).restart();
 }
 
+// Add a packet to the graph
 function addPacketToGraph(packet) {
-  // Only add nodes if both sourceIP and destinationIP exist
   if (!packet.sourceIP || !packet.destinationIP) {
     return;
   }
@@ -175,89 +269,4 @@ function addPacketToGraph(packet) {
     protocol: packet.protocol
   });
   updateGraph();
-}
-
-// ---------------------------------------------
-// 3) Play Music + Integrate Visuals
-// ---------------------------------------------
-function playPacketMusic(packet) {
-  let startTime = Tone.now();
-  let velocity = Math.min(0.6, packet.size / 2500);
-  let melodyNote = melodyScale[(packet.size % melodyScale.length)];
-  let bassNoteSet = getBassNotes(packet.size);
-  let playSubBass = packet.size % 7 === 0;
-
-  if (lastPlayedNote) {
-    synth.set({ portamento: 0.1 });
-  }
-  lastPlayedNote = melodyNote;
-
-  let protocolClass = "unknown";
-  if (packet.protocol === 17) {
-    synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
-    protocolClass = "udp";
-  } else {
-    darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
-    protocolClass = "tcp";
-  }
-  if (playSubBass) {
-    subSynth.triggerAttackRelease(bassNoteSet[0], "4n", startTime, 0.5);
-    protocolClass = "icmp";
-  }
-
-  updateNoteVisualizer(melodyNote, protocolClass);
-  addPacketToGraph(packet);
-}
-
-function updateNoteVisualizer(noteText, protocolClass) {
-  const noteElement = document.createElement("div");
-  noteElement.classList.add("note", protocolClass);
-  noteElement.textContent = `🎶 ${noteText}`;
-  document.getElementById("notes-display").prepend(noteElement);
-  setTimeout(() => noteElement.remove(), 4000);
-}
-
-function getBassNotes(seed) {
-  let chord = chordProgression[chordIndex % chordProgression.length];
-  let useThreeNotes = seed % 3 === 0;
-  return useThreeNotes ? chord : [chord[0], chord[2]];
-}
-
-// ---------------------------------------------
-// 4) WebSocket + Playback
-// ---------------------------------------------
-async function startMusic() {
-  await Tone.start();
-  console.log("🎵 Tone.js Ready");
-  connectWebSocket();
-  startPacketPlayback();
-  padSynth.triggerAttack();
-}
-
-function connectWebSocket() {
-  const ws = new WebSocket("ws://localhost:8765");
-  ws.onopen = () => {
-    console.log("✅ WebSocket Connected");
-  };
-  ws.onmessage = function(event) {
-    let packet = JSON.parse(event.data);
-    console.log("📩 Queued Packet:", packet);
-    packetQueue.push(packet);
-  };
-  ws.onclose = () => {
-    console.warn("⚠️ WebSocket Disconnected! Reconnecting...");
-    setTimeout(connectWebSocket, 2000);
-  };
-  ws.onerror = (error) => {
-    console.error("❌ WebSocket Error:", error);
-  };
-}
-
-function startPacketPlayback() {
-  setInterval(() => {
-    if (packetQueue.length > 0) {
-      let packet = packetQueue.shift();
-      playPacketMusic(packet);
-    }
-  }, playbackInterval * 1000);
 }

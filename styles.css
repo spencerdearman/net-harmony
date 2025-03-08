@@ -1,4 +1,3 @@
-/* Reset + full viewport */
 html, body {
   margin: 0;
   padding: 0;
@@ -9,7 +8,6 @@ html, body {
   font-family: sans-serif;
 }
 
-/* Fixed header at the top */
 .header {
   position: fixed;
   top: 20px;
@@ -41,62 +39,49 @@ h1 {
   background: #17a74c;
 }
 
-/* Main container: 2 columns (notes on left, graph on right).
-   We push it down so the fixed header doesn't overlap it. */
 .main-container {
   display: flex;
   width: 100%;
-  height: 100vh; /* Full viewport height */
-  margin-top: 100px; /* Enough space for the header above */
+  height: 100vh;
+  margin-top: 100px;
 }
 
-/* Left column for notes */
 .notes-column {
-  width: 320px;          /* Adjust to your liking */
+  width: 320px;
   min-width: 220px;
   display: flex;
   flex-direction: column;
   padding: 20px;
-  /* Make sure all notes are aligned on the left edge */
   align-items: flex-start;
 }
 
-/* Container for note tiles */
 #notes-display {
   width: 100%;
   display: flex;
   flex-direction: column;
-  /* Align note tiles to the left as well */
   align-items: flex-start;
 }
 
-/* Larger tile styling for each note */
 .note {
-  font-size: 1.4rem; /* Increase text size */
+  font-size: 1.4rem;
   padding: 10px 15px;
   margin: 5px 0;
   border-radius: 6px;
   animation: fadeOut 4s forwards;
 }
 
-/* Fade out upward instead of left */
 @keyframes fadeOut {
   0%   { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-20px); }
 }
 
-/* Protocol color classes for notes, if used */
-.udp     { background: #1DB954; }  /* UDP - Green */
-.tcp     { background: #F39C12; }  /* TCP - Orange */
-.icmp    { background: #E74C3C; }  /* ICMP - Red */
-.unknown { background: #7D3C98; }  /* Other - Purple */
+.udp     { background: #1DB954; }
+.tcp     { background: #F39C12; }
+.icmp    { background: #E74C3C; }
+.unknown { background: #7D3C98; }
 
-/* Right column: force-directed graph. Fills remaining space. */
 #network-graph {
-  flex: 1;        /* Take remaining horizontal space */
-  height: 100%;   /* Full column height */
+  flex: 1;
+  height: 100%;
   background: none;
-  /* If you want a subtle background for the graph area:
-  background: rgba(255, 255, 255, 0.04);
-  */
 }
