@@ -1,177 +1,263 @@
-// Tone.js Instruments
+// ---------------------------------------------
+// 1) Tone.js Instruments & Setup
+// ---------------------------------------------
 const reverb = new Tone.Reverb({ wet: 0.7, decay: 6 }).toDestination();
-const delay = new Tone.FeedbackDelay("8n", 0.4).toDestination(); // Subtle delay for texture
-const chorus = new Tone.Chorus(1.5, 2.5, 0.3).toDestination(); // Adds movement
+const chorus = new Tone.Chorus(1.5, 2.5, 0.3).toDestination();
 
 const synth = new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
 }).connect(reverb);
 
-// Darker Synth (Smoother & More Musical)
 const darkSynth = new Tone.PolySynth(Tone.Synth, {
-    volume: -10, // Keep it subtle
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.15, decay: 0.6, sustain: 0.7, release: 1.8 },
-    polyphony: 8
-}).connect(new Tone.Filter(1000, "lowpass").connect(chorus).connect(reverb)); 
+  volume: -10,
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.15, decay: 0.6, sustain: 0.7, release: 1.8 },
+  polyphony: 8
+}).connect(new Tone.Filter(1000, "lowpass").connect(chorus).connect(reverb));
 
-// 🌊 Ambient Pad (Soft Noise for Atmosphere)
 const padSynth = new Tone.NoiseSynth({
-    volume: -20, // Keep it subtle
-    noise: { type: "pink" },
-    envelope: { attack: 2, decay: 5, sustain: 0.7, release: 3 }
+  volume: -20,
+  noise: { type: "pink" },
+  envelope: { attack: 2, decay: 5, sustain: 0.7, release: 3 }
 }).connect(new Tone.AutoFilter("0.2n").toDestination());
 
-// 🔉 Sub Bass for Depth
 const subSynth = new Tone.MonoSynth({
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.3, decay: 0.8, sustain: 0.6, release: 2 }
-}).connect(new Tone.Filter(200, "lowpass").toDestination()); // Deep lowpass keeps it clean
+  oscillator: { type: "sine" },
+  envelope: { attack: 0.3, decay: 0.8, sustain: 0.6, release: 2 }
+}).connect(new Tone.Filter(200, "lowpass").toDestination());
 
 const lowPass = new Tone.Filter(1200, "lowpass").toDestination();
 synth.connect(lowPass);
 
-// Chord Progression (for harmony)
+// Some chord progression (for harmony)
 const chordProgression = [
-    ["C3", "D#3", "G3"],  // C Minor
-    ["A2", "C3", "E3"],   // A Minor
-    ["D3", "F3", "A3"],   // D Minor
-    ["G2", "A#2", "D3"]   // G Minor
+  ["C3", "D#3", "G3"],  // C Minor
+  ["A2", "C3", "E3"],   // A Minor
+  ["D3", "F3", "A3"],   // D Minor
+  ["G2", "A#2", "D3"]   // G Minor
 ];
 let chordIndex = 0;
 
-// Scales
+// Scale logic
 const minorScale = [2, 1, 2, 2, 1, 2, 2];
 const keys = ['F', 'D', 'G', 'C', 'D#', 'A#'];
 const key = keys[Math.floor(Math.random() * keys.length)];
 const melodyScale = createScale(`${key}4`, minorScale);
-const bassScale = createScale(`${key}2`, minorScale);
 
 function createScale(root, mode) {
-    const scale = [root];
-    let note = root.slice(0, -1);
-    let octave = parseInt(root.slice(-1));
-    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const scale = [root];
+  let note = root.slice(0, -1);
+  let octave = parseInt(root.slice(-1));
+  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-    for (const step of mode) {
-        const noteIndex = notes.indexOf(note);
-        const nextNoteIndex = (noteIndex + step) % notes.length;
-        if (nextNoteIndex < noteIndex) octave += 1;
-        note = notes[nextNoteIndex];
-        scale.push(note + octave);
-    }
-    return scale;
+  for (const step of mode) {
+    const noteIndex = notes.indexOf(note);
+    const nextNoteIndex = (noteIndex + step) % notes.length;
+    if (nextNoteIndex < noteIndex) octave += 1;
+    note = notes[nextNoteIndex];
+    scale.push(note + octave);
+  }
+  return scale;
 }
 
 // Packet Queue
 let packetQueue = [];
-const playbackInterval = 0.5; // Controlled timing
+const playbackInterval = 0.5; // seconds
 let lastPlayedNote = null;
 
-// Start Tone.js on User Interaction
-async function startMusic() {
-    await Tone.start();
-    console.log("🎵 Tone.js Ready");
+// ---------------------------------------------
+// 2) D3 Force-Directed Graph Setup
+// ---------------------------------------------
+const svg = d3.select("#network-graph");
 
-    connectWebSocket();
-    startPacketPlayback();
+// The width/height of the entire window (for bounding)
+const width = window.innerWidth;
+const height = window.innerHeight;
 
-    // Start the ambient pad
-    padSynth.triggerAttack();
+// Data arrays for D3
+let nodes = [];
+let links = [];
+const nodeByIP = new Map();
+
+// Force simulation
+const simulation = d3.forceSimulation(nodes)
+  .force("charge", d3.forceManyBody().strength(-50))
+  .force("center", d3.forceCenter(width / 2, height / 2))
+  .force("link", d3.forceLink(links).id(d => d.id).distance(120))
+  .on("tick", ticked);
+
+// Selections for links & nodes
+let linkSelection = svg.selectAll(".link");
+let nodeSelection = svg.selectAll(".node");
+
+// Margin for clamping so nodes don’t sit on the very edge
+const margin = 30;
+
+function ticked() {
+  // Position the links
+  linkSelection
+    .attr("x1", d => d.source.x)
+    .attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x)
+    .attr("y2", d => d.target.y);
+
+  // Clamp each node’s x & y to keep it in the viewport
+  nodeSelection
+    .attr("cx", d => {
+      d.x = Math.max(margin, Math.min(width - margin, d.x));
+      return d.x;
+    })
+    .attr("cy", d => {
+      d.y = Math.max(margin, Math.min(height - margin, d.y));
+      return d.y;
+    });
 }
 
-// WebSocket Connection
-function connectWebSocket() {
-    const ws = new WebSocket("ws://localhost:8765");
-
-    ws.onopen = () => {
-        console.log("✅ WebSocket Connected");
-    };
-
-    ws.onmessage = function (event) {
-        let packet = JSON.parse(event.data);
-        console.log("📩 Queued Packet:", packet);
-        packetQueue.push(packet);
-    };
-
-    ws.onclose = function () {
-        console.warn("⚠️ WebSocket Disconnected! Reconnecting...");
-        setTimeout(connectWebSocket, 2000);
-    };
-
-    ws.onerror = function (error) {
-        console.error("❌ WebSocket Error:", error);
-    };
+// Map protocol to color
+function getColorForProtocol(protocol) {
+  if (protocol === 17) {
+    return "#1DB954"; // UDP - Green
+  } else if (protocol === 6) {
+    return "#F39C12"; // TCP - Orange
+  } else if (protocol === "ICMP") {
+    return "#E74C3C"; // ICMP - Red
+  } else {
+    return "#7D3C98"; // Unknown - Purple
+  }
 }
 
-// Regularly Process the Packet Queue
-function startPacketPlayback() {
-    setInterval(() => {
-        if (packetQueue.length > 0) {
-            let packet = packetQueue.shift();
-            playPacketMusic(packet);
-        }
-    }, playbackInterval * 1000);
+// Update graph with current nodes and links
+function updateGraph() {
+  // Update links
+  linkSelection = linkSelection.data(links);
+  linkSelection.exit().remove();
+  linkSelection = linkSelection.enter()
+    .append("line")
+    .attr("class", "link")
+    .attr("stroke", "#999")
+    .attr("stroke-width", 1)
+    .merge(linkSelection);
+
+  // Update nodes; color based on protocol
+  nodeSelection = nodeSelection.data(nodes);
+  nodeSelection.exit().remove();
+  nodeSelection = nodeSelection.enter()
+    .append("circle")
+    .attr("class", "node")
+    .attr("r", 10)
+    .attr("fill", d => getColorForProtocol(d.protocol))
+    .merge(nodeSelection);
+
+  simulation.nodes(nodes);
+  simulation.force("link").links(links);
+  simulation.alpha(0.9).restart();
 }
 
-// Play Music from Queued Packets
+function addPacketToGraph(packet) {
+  // Only add nodes if both sourceIP and destinationIP exist
+  if (!packet.sourceIP || !packet.destinationIP) {
+    return;
+  }
+  if (!nodeByIP.has(packet.sourceIP)) {
+    const newNode = { id: packet.sourceIP, protocol: packet.protocol };
+    nodes.push(newNode);
+    nodeByIP.set(packet.sourceIP, newNode);
+  }
+  if (!nodeByIP.has(packet.destinationIP)) {
+    const newNode = { id: packet.destinationIP, protocol: packet.protocol };
+    nodes.push(newNode);
+    nodeByIP.set(packet.destinationIP, newNode);
+  }
+  links.push({
+    source: packet.sourceIP,
+    target: packet.destinationIP,
+    protocol: packet.protocol
+  });
+  updateGraph();
+}
+
+// ---------------------------------------------
+// 3) Play Music + Integrate Visuals
+// ---------------------------------------------
 function playPacketMusic(packet) {
-    let startTime = Tone.now();
-    let velocity = Math.min(0.6, packet.size / 2500);
-    let melodyNote = melodyScale[(packet.size % melodyScale.length)];
-    let bassNoteSet = getBassNotes(packet.size);
-    let playSubBass = packet.size % 7 === 0; // Play sub-bass every few packets
+  let startTime = Tone.now();
+  let velocity = Math.min(0.6, packet.size / 2500);
+  let melodyNote = melodyScale[(packet.size % melodyScale.length)];
+  let bassNoteSet = getBassNotes(packet.size);
+  let playSubBass = packet.size % 7 === 0;
 
-    console.log(`🎶 Playing: ${melodyNote} (UDP) | ${bassNoteSet} (Other packets) | ${playSubBass ? "Sub Bass" : ""}, Protocol: ${packet.protocol}`);
+  if (lastPlayedNote) {
+    synth.set({ portamento: 0.1 });
+  }
+  lastPlayedNote = melodyNote;
 
-    // Smooth glide between notes
-    if (lastPlayedNote) {
-        synth.set({ portamento: 0.1 });
-    }
-    lastPlayedNote = melodyNote;
+  let protocolClass = "unknown";
+  if (packet.protocol === 17) {
+    synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
+    protocolClass = "udp";
+  } else {
+    darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
+    protocolClass = "tcp";
+  }
+  if (playSubBass) {
+    subSynth.triggerAttackRelease(bassNoteSet[0], "4n", startTime, 0.5);
+    protocolClass = "icmp";
+  }
 
-    // Play melody (UDP Packets)
-    let protocolClass = "unknown";
-    if (packet.protocol === 17) {
-        synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
-        protocolClass = "udp";
-    }
-    // Play darker synth for harmony (Non-UDP Packets)
-    else {
-        darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
-        protocolClass = "tcp";
-    }
-
-    // Subtle Sub Bass (Every few packets)
-    if (playSubBass) {
-        subSynth.triggerAttackRelease(bassNoteSet[0], "4n", startTime, 0.5);
-        protocolClass = "icmp";
-    }
-
-    updateVisualizer(melodyNote, protocolClass);
+  updateNoteVisualizer(melodyNote, protocolClass);
+  addPacketToGraph(packet);
 }
 
-// UI Update
-function updateVisualizer(noteText, protocolClass) {
-    const noteElement = document.createElement("div");
-    noteElement.classList.add("note", protocolClass);
-    noteElement.textContent = `🎶 ${noteText}`;
-    document.getElementById("notes-display").prepend(noteElement);
-    setTimeout(() => noteElement.remove(), 4000);
+function updateNoteVisualizer(noteText, protocolClass) {
+  const noteElement = document.createElement("div");
+  noteElement.classList.add("note", protocolClass);
+  noteElement.textContent = `🎶 ${noteText}`;
+  document.getElementById("notes-display").prepend(noteElement);
+  setTimeout(() => noteElement.remove(), 4000);
 }
 
-// Function to pick bass notes (Root + Fifth or Root + Third + Fifth)
 function getBassNotes(seed) {
-    let chord = chordProgression[chordIndex % chordProgression.length];
-    let useThreeNotes = seed % 3 === 0; // Occasionally use three-note harmony
-
-    if (useThreeNotes) {
-        return chord; // Return full triad (Root + Minor Third + Fifth)
-    } else {
-        return [chord[0], chord[2]]; // Return Root + Fifth
-    }
+  let chord = chordProgression[chordIndex % chordProgression.length];
+  let useThreeNotes = seed % 3 === 0;
+  return useThreeNotes ? chord : [chord[0], chord[2]];
 }
 
-// Attach click event to start music
-document.body.addEventListener("click", startMusic);
+// ---------------------------------------------
+// 4) WebSocket + Playback
+// ---------------------------------------------
+async function startMusic() {
+  await Tone.start();
+  console.log("🎵 Tone.js Ready");
+  connectWebSocket();
+  startPacketPlayback();
+  padSynth.triggerAttack();
+}
+
+function connectWebSocket() {
+  const ws = new WebSocket("ws://localhost:8765");
+  ws.onopen = () => {
+    console.log("✅ WebSocket Connected");
+  };
+  ws.onmessage = function(event) {
+    let packet = JSON.parse(event.data);
+    console.log("📩 Queued Packet:", packet);
+    packetQueue.push(packet);
+  };
+  ws.onclose = () => {
+    console.warn("⚠️ WebSocket Disconnected! Reconnecting...");
+    setTimeout(connectWebSocket, 2000);
+  };
+  ws.onerror = (error) => {
+    console.error("❌ WebSocket Error:", error);
+  };
+}
+
+function startPacketPlayback() {
+  setInterval(() => {
+    if (packetQueue.length > 0) {
+      let packet = packetQueue.shift();
+      playPacketMusic(packet);
+    }
+  }, playbackInterval * 1000);
+}

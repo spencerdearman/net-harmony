@@ -1,20 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Packet Music</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.35/Tone.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live Packet Music</title>
+  <!-- Tone.js + D3 (CDNs) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.35/Tone.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <!-- Our custom styles -->
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div class="container">
-        <h1>Live Packet Music</h1>
-        <button onclick="startMusic()" class="start-btn">Start</button>
-        <div class="visualizer">
-            <div id="notes-display"></div>
-        </div>
+  <!-- Fixed Header at the top center -->
+  <div class="header">
+    <h1>Live Packet Music</h1>
+    <button class="start-btn" onclick="startMusic()">Start</button>
+  </div>
+
+  <!-- Main 2-column layout -->
+  <div class="main-container">
+    <!-- Left column for notes -->
+    <div class="notes-column">
+      <div id="notes-display"></div>
     </div>
-    <script src="script.js"></script>
+    <!-- Right column: Force-directed graph -->
+    <svg id="network-graph"></svg>
+  </div>
+
+  <!-- Our main script with bounding logic -->
+  <script src="script.js"></script>
 </body>
 </html>

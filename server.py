@@ -1,24 +1,28 @@
 import asyncio
 import websockets
 import json
-from scapy.all import sniff
+from scapy.all import sniff, IP  # Import IP layer for packet inspection
 
 async def process_packet(packet):
     """Extract relevant fields from a network packet."""
     try:
-        return {
+        data = {
             "timestamp": packet.time,
             "size": len(packet),
             "protocol": packet.proto if hasattr(packet, "proto") else "Unknown"
         }
+        # If the packet has an IP layer, extract the source and destination IPs
+        if packet.haslayer(IP):
+            data["sourceIP"] = packet[IP].src
+            data["destinationIP"] = packet[IP].dst
+        return data
     except Exception as e:
         print(f"❌ Error processing packet: {e}")
         return None
 
 async def send_packets(websocket):
-    """Continuously captures packets and sends them to the WebSocket client."""
+    """Continuously capture packets and send them to the WebSocket client."""
     print("🌐 WebSocket Client Connected!")
-
     try:
         while True:
             packets = sniff(count=5, timeout=1)  # Capture packets with timeout
@@ -38,7 +42,6 @@ async def send_packets(websocket):
 async def main():
     print("🚀 Starting WebSocket Server on ws://localhost:8765...")
     server = await websockets.serve(send_packets, "localhost", 8765)
-
     try:
         await server.wait_closed()  # Keeps the server running
     except KeyboardInterrupt:
@@ -46,6 +49,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-    # make a second instrument in a lower octave with longer notes,
-    # potentially only picks from a first and fifth, first third and fifth, holding the tone for logner
