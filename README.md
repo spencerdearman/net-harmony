@@ -26,7 +26,6 @@ This project turns **live network packets** into **musical notes** and visualize
    - Nodes are color-coded by protocol:
      - **UDP (17)** = Green
      - **TCP (6)** = Orange
-     - **ICMP** = Red
      - **Unknown** = Purple
 
 ## Running the Project
