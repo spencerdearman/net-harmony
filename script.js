@@ -6,6 +6,13 @@ const synth = new Tone.PolySynth(Tone.Synth, {
     envelope: { attack: 0.2, decay: 0.5, sustain: 0.5, release: 1.5 }
 }).connect(reverb);
 
+// Darker Synth (Now Smoother & More Musical)
+const darkSynth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sine" }, // Softer sawtooth for a richer, warm tone
+    envelope: { attack: 0.15, decay: 0.6, sustain: 0.7, release: 1.8 }, // Balanced decay and sustain
+    polyphony: 8 // Allows smoother overlapping notes
+}).connect(new Tone.Filter(1000, "lowpass").toDestination()); // Slightly darkened tone
+
 const piano = new Tone.Sampler({
     baseUrl: "https://tonejs.github.io/audio/salamander/",
     urls: {
@@ -19,18 +26,12 @@ const piano = new Tone.Sampler({
 const lowPass = new Tone.Filter(1200, "lowpass").toDestination();
 synth.connect(lowPass);
 
-// IGMP Synth
-const igmpSynth = new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: "triangle" },
-    envelope: { attack: 0.5, decay: 1, sustain: 0.8, release: 2 }
-}).connect(new Tone.Reverb({ wet: 0.9, decay: 5 }).toDestination());
-
-// Chords for Harmony
+// Chord Progression (for harmony)
 const chordProgression = [
-    ["C4", "E4", "G4", "B4"],   // Cmaj7
-    ["A3", "C4", "E4", "G4"],   // Am7
-    ["D4", "F4", "A4", "C5"],   // Dm7
-    ["G3", "B3", "D4", "F4"]    // G7
+    ["C3", "E3", "G3"],   // C Major
+    ["A2", "C3", "E3"],   // A Minor
+    ["D3", "F3", "A3"],   // D Minor
+    ["G2", "B2", "D3"]    // G Major
 ];
 let chordIndex = 0;
 
@@ -38,8 +39,8 @@ let chordIndex = 0;
 const minorScale = [2, 1, 2, 2, 1, 2, 2];
 const keys = ['F', 'D', 'G', 'C', 'D#', 'A#'];
 const key = keys[Math.floor(Math.random() * keys.length)];
-const rightHandScale = createScale(`${key}4`, minorScale);
-const leftHandScale = createScale(`${key}3`, minorScale);
+const melodyScale = createScale(`${key}4`, minorScale);
+const bassScale = createScale(`${key}2`, minorScale);
 
 function createScale(root, mode) {
     const scale = [root];
@@ -59,25 +60,16 @@ function createScale(root, mode) {
 
 // Packet Queue
 let packetQueue = [];
-const playbackInterval = 0.5; // More controlled timing
-let activeSynthNote = null;
-let activePianoNote = null;
-let activeIgmpNote = null;
+const playbackInterval = 0.5; // Controlled timing
 let lastPlayedNote = null;
-
-let hasStarted = false;
 
 // Start Tone.js on User Interaction
 async function startMusic() {
     await Tone.start();
     console.log("🎵 Tone.js Ready");
 
-    if (!hasStarted) {
-        hasStarted = true;
-        connectWebSocket();
-        startPacketPlayback(); // Start processing the queue
-        // playChords(); // Start harmonic progression
-    }
+    connectWebSocket();
+    startPacketPlayback();
 }
 
 // WebSocket Connection
@@ -114,65 +106,42 @@ function startPacketPlayback() {
     }, playbackInterval * 1000);
 }
 
-// Background Chord Progression
-function playChords() {
-    setInterval(() => {
-        let chord = chordProgression[chordIndex];
-        synth.triggerAttackRelease(chord, "2n", Tone.now(), 0.4);
-        chordIndex = (chordIndex + 1) % chordProgression.length;
-    }, 4000); // Change chords every 4 seconds
-}
-
 // Play Music from Queued Packets
 function playPacketMusic(packet) {
     let startTime = Tone.now();
-    let pitch = rightHandScale[(packet.size % rightHandScale.length)];
-    let velocity = Math.min(0.5, packet.size / 2500);
+    let velocity = Math.min(0.6, packet.size / 2500);
+    let melodyNote = melodyScale[(packet.size % melodyScale.length)];
+    let bassNoteSet = getBassNotes(packet.size);
 
-    if (packet.size > 1000) {
-        pitch = leftHandScale[Math.floor(Math.random() * leftHandScale.length)];
-        velocity *= 0.4;
-    }
+    console.log(`🎶 Playing: ${melodyNote} (UDP) | ${bassNoteSet} (Other packets), Protocol: ${packet.protocol}`);
 
-    console.log(`🎶 Playing: ${pitch}, Protocol: ${packet.protocol}`);
-
-    // Portamento Effect (Gliding between notes)
+    // Smooth glide between notes
     if (lastPlayedNote) {
-        synth.set({
-            portamento: 0.1 // Adds a smooth glide between notes
-        });
+        synth.set({ portamento: 0.1 });
     }
-    lastPlayedNote = pitch;
+    lastPlayedNote = melodyNote;
 
-    // Stop previous notes before playing a new one
-    if (activeSynthNote) synth.triggerRelease(activeSynthNote);
-    if (activePianoNote) piano.triggerRelease(activePianoNote);
-    if (activeIgmpNote) igmpSynth.triggerRelease(activeIgmpNote);
-
-    // Protocol Mappings
-    if (packet.protocol === 17) { // UDP -- potentially melodic
-        synth.triggerAttackRelease(pitch, 0.5, startTime, velocity * 0.6);
-        activeSynthNote = pitch;
+    // Play melody (UDP Packets)
+    if (packet.protocol === 17) {
+        synth.triggerAttackRelease(melodyNote, "8n", startTime, velocity);
     }
-    else if (packet.protocol === 6) { // TCP -- potentially base notes
-        piano.triggerAttacRelease(pitch, 0.5, startTime, velocity * 0.8);
-        activePianoNote = pitch;
-    }
-    else if (packet.protocol === 2) { // IGMP (New Pad Synth)
-        igmpSynth.triggerAttackRelease(pitch, 0.5, startTime, velocity * 0.7);
-        activeIgmpNote = pitch;
-    }
-    else if (packet.protocol === 1) { // ICMP (Percussion hit)
-        let noiseSynth = new Tone.NoiseSynth({
-            volume: -15,
-            envelope: { attack: 0.01, decay: 0.1, sustain: 0 }
-        }).toDestination();
-        noiseSynth.triggerAttackRelease("8n");
-    }
+    // Play darker synth for harmony (Non-UDP Packets)
     else {
-        console.warn(`🔍 Unmapped protocol: ${packet.protocol}`);
+        darkSynth.triggerAttackRelease(bassNoteSet, "4n", startTime, velocity * 0.7);
     }
 }
 
-// **Attach click event to start music**
+// Function to pick bass notes (Root + Fifth or Root + Third + Fifth)
+function getBassNotes(seed) {
+    let chord = chordProgression[chordIndex % chordProgression.length];
+    let useThreeNotes = seed % 3 === 0; // Occasionally use three-note harmony
+
+    if (useThreeNotes) {
+        return chord; // Return full triad (Root + Third + Fifth)
+    } else {
+        return [chord[0], chord[2]]; // Return Root + Fifth
+    }
+}
+
+// Attach click event to start music
 document.body.addEventListener("click", startMusic);
